@@ -20,18 +20,30 @@
 
 ## 二、项目目录结构
 ```plaintext
-MLOps_Project
+mlops-lite
+├── assets # SHAP 特征重要性可视化图片、超参数搜索结果
 ├── config
-│   └── settings.py        # 全局统一配置中心（路径、超参、特征列表、版本规则）
+│ ├── init.py
+│ └── settings.py # 全局路径、模型参数、文件路径统一配置中心
 ├── data
-│   └── telco_churn.csv    # 原始数据集
+│ └── telco_churn.csv # 电信用户流失原始业务数据集
+├── logs # 运行日志目录
+├── models
+│ └── v1 # v1 版本归档模型
+│ ├── eval_metrics.json # 模型 AUC/F1 / 准确率评估指标
+│ ├── std_scaler.pkl # 特征标准化器
+│ ├── train_feature_columns.txt # 训练使用特征列表
+│ ├── train_metadata.json # 训练元信息、最优超参数
+│ └── xgb_best_model.pkl # XGBoost 最优训练模型
 ├── src
-│   ├── data_process.py    # 数据清洗、特征工程、数据集划分
-│   ├── train.py           # 模型训练、网格搜索、版本归档、SHAP绘图
-│   ├── predict.py         # 模型加载、单样本推理
-│   └── test_pred.py       # 预测功能单元测试
-├── models                 # 模型版本归档目录，按版本分文件夹存储资产
-├── assets                 # 可视化图表、超参搜索结果CSV
-├── logs                   # 运行日志
-├── requirements.txt       # 项目依赖包
-└── README.md
+│ ├── init.py
+│ ├── api_app.py # Day15 Flask 推理服务、健康检查接口
+│ ├── data_process.py # 数据清洗、缺失值填充、特征衍生、数据集划分
+│ ├── predict.py # 模型加载、单样本 / 批量预测推理
+│ └── train_model.py # XGBoost 训练、超参数寻优、SHAP 绘图、模型持久化
+├── tests
+│ └── test_train.py # 模型加载与预测单元测试脚本
+├── venv # 本地虚拟环境（.gitignore 忽略不上传）
+├── .gitignore # Git 忽略文件配置
+├── README.md # 项目说明文档
+└── requirements.txt # 项目所有依赖包清单

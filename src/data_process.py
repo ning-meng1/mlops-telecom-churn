@@ -50,8 +50,10 @@ def build_business_features(df):
 
 def encode_binary_features(df):
     df = df.copy()
-    # 标签列转换为二分类目标变量
-    df[TARGET_COL] = df[TARGET_COL].map({"Yes": 1, "No": 0})
+
+    # --------修复：只有标签列存在的时候，才转换标签，推理时跳过----------
+    if TARGET_COL in df.columns:
+        df[TARGET_COL] = df[TARGET_COL].map({"Yes": 1, "No": 0})
 
     for col in BINARY_COLS:
         if col not in df.columns:
@@ -68,6 +70,23 @@ def encode_multi_category(df):
     df = pd.get_dummies(df, columns=MULTI_CAT_COLS, drop_first=True)
     return df
 
+def raw_data_transform(df: pd.DataFrame):
+    """
+    推理接口专用！输入【原始业务DataFrame】，和训练执行完全一样清洗、衍生、编码
+    ❗不读取csv、❗不做标准化、❗不分割数据集
+    """
+    df = df.copy()
+    df = clean_total_charges(df)
+    df = build_business_features(df)
+    df = encode_binary_features(df)
+    df = encode_multi_category(df)
+
+    # 丢弃不需要的原始列
+    drop_cols = DROP_COLS.copy()
+    for col in drop_cols:
+        if col in df.columns:
+            df.drop(columns=[col], inplace=True)
+    return df
 
 def standardize_features(X):
     X = X.copy()
@@ -105,8 +124,8 @@ def get_full_dataset(fix_seed=DEFAULT_SEED):
     df = encode_binary_features(df)
     df = encode_multi_category(df)
 
-    X = df.drop(columns=DROP_COLS)
     y = df[TARGET_COL]
+    X = df.drop(columns=DROP_COLS+[TARGET_COL])
 
     X_scaled, scaler = standardize_features(X)
     X_train, X_test, y_train, y_test = split_dataset(X_scaled, y, fix_seed)

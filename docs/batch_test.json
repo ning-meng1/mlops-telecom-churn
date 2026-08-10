@@ -1,0 +1,46 @@
+{
+"features_list":[
+{
+"gender":"Female",
+"SeniorCitizen":0,
+"Partner":"Yes",
+"Dependents":"No",
+"tenure":24,
+"PhoneService":"Yes",
+"MultipleLines":"No",
+"InternetService":"DSL",
+"OnlineSecurity":"No",
+"OnlineBackup":"Yes",
+"DeviceProtection":"No",
+"TechSupport":"No",
+"StreamingTV":"Yes",
+"StreamingMovies":"Yes",
+"Contract":"Month-to-month",
+"PaperlessBilling":"Yes",
+"PaymentMethod":"Electronic check",
+"MonthlyCharges":75.2,
+"TotalCharges":1804.8
+},
+{
+"gender":"Male",
+"SeniorCitizen":1,
+"Partner":"No",
+"Dependents":"No",
+"tenure":3,
+"PhoneService":"Yes",
+"MultipleLines":"Yes",
+"InternetService":"Fiber optic",
+"OnlineSecurity":"No",
+"OnlineBackup":"No",
+"DeviceProtection":"No",
+"TechSupport":"No",
+"StreamingTV":"Yes",
+"StreamingMovies":"Yes",
+"Contract":"Month-to-month",
+"PaperlessBilling":"Yes",
+"PaymentMethod":"Electronic check",
+"MonthlyCharges":92.5,
+"TotalCharges":277.5
+}
+]
+}

@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 全局默认模型版本
-DEFAULT_MODEL_VERSION = "v1"
+DEFAULT_MODEL_VERSION = "v2"
 
 # 基础文件夹路径
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -30,7 +30,7 @@ SERVICE_PORT = 5000
 
 # 全局固定随机种子，保障实验可复现
 DEFAULT_SEED = 42
-
+TEST_SIZE = 0.2
 # 日志配置
 LOG_CONFIG = {
     "log_file": os.path.join(LOG_PATH, "app.log"),
@@ -71,7 +71,7 @@ MULTI_CAT_COLS = [
     'Contract', 'PaymentMethod'
 ]
 # 建模前需要剔除的字段
-DROP_COLS = ['customerID', 'Churn']
+DROP_COLS = ['customerID']
 # 预测目标标签
 TARGET_COL = "Churn"
 

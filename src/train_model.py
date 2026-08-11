@@ -31,6 +31,7 @@ from config.settings import (
     VERSION_EVAL_JSON
 )
 from src.data_process import get_full_dataset
+from src.logger import logger
 
 # ===========命令行参数解析===============
 parser = argparse.ArgumentParser(description="电信用户流失XGBoost训练脚本")
@@ -50,13 +51,13 @@ random.seed(RUN_SEED)
 np.random.seed(RUN_SEED)
 os.environ['PYTHONHASHSEED'] = str(RUN_SEED)
 
-# 训练启动日志
-print("=" * 70)
-print(f"【模型训练启动日志】")
-print(f"固定随机种子: {RUN_SEED}")
-print(f"模型归档版本: {RUN_VERSION}")
-print(f"是否开启SHAP绘图: {DRAW_SHAP}")
-print("=" * 70)
+# 训练启动日志（替换print）
+logger.info("=" * 70)
+logger.info("【模型训练启动】")
+logger.info(f"固定随机种子: {RUN_SEED}")
+logger.info(f"模型归档版本: {RUN_VERSION}")
+logger.info(f"是否开启SHAP绘图: {DRAW_SHAP}")
+logger.info("=" * 70)
 
 
 def train_single_model(params, X_train, X_test, y_train, y_test):
@@ -87,7 +88,10 @@ def train_single_model(params, X_train, X_test, y_train, y_test):
 
 def hyperparameter_tuning():
     """网格搜索遍历超参数，筛选最优模型并归档全部产物"""
+    logger.info("开始加载训练数据集与划分训练/测试集")
     X_train, X_test, y_train, y_test, scaler, features = get_full_dataset(fix_seed=RUN_SEED)
+    logger.info(f"数据集加载完成，训练集样本：{X_train.shape[0]}，测试集样本：{X_test.shape[0]}")
+
     param_grid = ParameterGrid(PARAM_GRID)
 
     all_result = []
@@ -95,31 +99,34 @@ def hyperparameter_tuning():
     best_model = None
     best_params = None
 
-    print("===== 开始超参数网格遍历训练 =====")
+    logger.info("===== 开始超参数网格遍历训练 =====")
     total_num = len(param_grid)
+    logger.info(f"待遍历超参组合总数：{total_num}")
 
     for idx, param in enumerate(param_grid):
-        print(f"\n[{idx + 1}/{total_num}] 当前测试超参：{param}")
+        logger.info(f"\n[{idx + 1}/{total_num}] 当前测试超参：{param}")
         try:
             model, metric = train_single_model(param, X_train, X_test, y_train, y_test)
             all_result.append(metric)
-            print(f"指标 -> AUC:{metric['auc']} ACC:{metric['accuracy']} F1:{metric['f1']}")
+            logger.info(f"本组指标 -> AUC:{metric['auc']} ACC:{metric['accuracy']} F1:{metric['f1']}")
 
             # 以AUC作为最优模型筛选标准
             if metric["auc"] > best_auc:
                 best_auc = metric["auc"]
                 best_model = model
                 best_params = param
+                logger.info(f"更新最优模型，当前最高AUC={best_auc:.4f}")
         except Exception as e:
-            print(f"⚠️ 该组参数训练失败，自动跳过，错误信息：{str(e)}")
+            logger.error(f"该组参数训练失败，自动跳过，错误信息：{str(e)}", exc_info=True)
             continue
 
-    print(f"\n===== 网格搜索全部完成 =====")
-    print(f"最优超参数：{best_params}")
-    print(f"最优验证集AUC：{best_auc:.4f}")
+    logger.info(f"\n===== 网格搜索全部完成 =====")
+    logger.info(f"最优超参数：{best_params}")
+    logger.info(f"最优验证集AUC：{best_auc:.4f}")
 
     # 创建当前版本独立归档文件夹
     version_dir = get_version_storage_dir(RUN_VERSION)
+    logger.info(f"模型版本存储目录：{version_dir}")
 
     # 可视化图片输出路径
     feat_img_path = os.path.join(ASSETS_DIR, f"xgb_feature_importance_{RUN_VERSION}.png")
@@ -129,10 +136,12 @@ def hyperparameter_tuning():
     # 1. 保存最优模型与标准化器
     joblib.dump(best_model, os.path.join(version_dir, VERSION_MODEL_NAME))
     joblib.dump(scaler, os.path.join(version_dir, VERSION_SCALER_NAME))
+    logger.info("最优模型、scaler保存完成")
 
     # 2. 保存特征名称列表，推理阶段保证特征顺序对齐
     with open(os.path.join(version_dir, VERSION_FEATURE_TXT), "w", encoding="utf-8") as f:
         f.write("\n".join(features))
+    logger.info("特征列表文件保存完成")
 
     # 3. 写入训练元数据，用于实验追溯、复现
     meta_info = {
@@ -146,6 +155,7 @@ def hyperparameter_tuning():
     }
     with open(os.path.join(version_dir, VERSION_META_JSON), "w", encoding="utf-8") as f:
         json.dump(meta_info, f, ensure_ascii=False, indent=2)
+    logger.info("训练元信息meta.json保存完成")
 
     # 4. 保存最优评估指标
     best_metric_record = max(all_result, key=lambda x: x["auc"])
@@ -156,18 +166,20 @@ def hyperparameter_tuning():
     }
     with open(os.path.join(version_dir, VERSION_EVAL_JSON), "w", encoding="utf-8") as f:
         json.dump(eval_result_json, f, indent=2)
+    logger.info("模型评估指标eval.json保存完成")
 
     # 5. 保存全部超参搜索结果
     pd.DataFrame(all_result).to_csv(csv_result_path, index=False, encoding="utf-8-sig")
+    logger.info(f"超参遍历记录表已保存：{csv_result_path}")
 
-    print(f"\n版本{RUN_VERSION}全套模型文件已归档至：{version_dir}")
-    print(f"超参遍历记录表已保存：{csv_result_path}")
+    logger.info(f"\n版本{RUN_VERSION}全套模型文件归档完毕，路径：{version_dir}")
 
     return best_model, X_test, features, feat_img_path, shap_img_path, csv_result_path, version_dir, eval_result_json
 
 
 def plot_shap_bar(model, X_test_data, feature_names, save_path):
     """绘制SHAP特征重要性条形图"""
+    logger.info("开始生成SHAP特征重要性图")
     explainer = shap.TreeExplainer(model)
     shap_vals = explainer.shap_values(X_test_data)
     plt.figure(figsize=(11, 6))
@@ -175,11 +187,12 @@ def plot_shap_bar(model, X_test_data, feature_names, save_path):
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
     plt.close()
-    print(f"✅ SHAP可视化图已保存：{save_path}")
+    logger.info(f"SHAP可视化图已保存：{save_path}")
 
 
 def plot_xgb_feature_importance(model, feature_names, save_path):
     """绘制XGB原生特征重要性图"""
+    logger.info("开始生成XGB原生特征重要性图")
     plt.figure(figsize=(11, 6))
     plt.barh(feature_names, model.feature_importances_)
     plt.xlabel("Feature Importance Score")
@@ -187,11 +200,12 @@ def plot_xgb_feature_importance(model, feature_names, save_path):
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
     plt.close()
-    print(f"✅ XGB特征重要性图已保存：{save_path}")
+    logger.info(f"XGB特征重要性图已保存：{save_path}")
 
 
 # ==================== 程序入口 ====================
 if __name__ == "__main__":
+    logger.info("执行训练主流程 hyperparameter_tuning")
     model, X_test, feat_list, feat_img_save, shap_img_save, csv_path, archive_folder, eval_dict = hyperparameter_tuning()
 
     # 按需生成可视化图片
@@ -199,18 +213,18 @@ if __name__ == "__main__":
         plot_shap_bar(model, X_test, feat_list, shap_img_save)
         plot_xgb_feature_importance(model, feat_list, feat_img_save)
     else:
-        print("\nℹ️ 未启用SHAP绘图，跳过可视化生成")
+        logger.info("未启用SHAP绘图，跳过可视化生成")
 
-    print("\n" + "=" * 70)
-    print("✅ 模型训练+调参+版本归档全流程执行完毕！")
-    print(f"归档版本号：{RUN_VERSION}")
-    print(f"模型存储目录：{archive_folder}")
-    print(f"验证集最终指标：{eval_dict}")
-    print("外部产出文件：")
-    print(f"1. 超参搜索明细CSV：{csv_path}")
+    logger.info("\n" + "=" * 70)
+    logger.info("✅ 模型训练+调参+版本归档全流程执行完毕！")
+    logger.info(f"归档版本号：{RUN_VERSION}")
+    logger.info(f"模型存储目录：{archive_folder}")
+    logger.info(f"验证集最终指标：{eval_dict}")
+    logger.info("外部产出文件：")
+    logger.info(f"1. 超参搜索明细CSV：{csv_path}")
     if DRAW_SHAP:
-        print(f"2. SHAP重要性图：{shap_img_save}")
-        print(f"3. XGB特征重要性图：{feat_img_save}")
-    print("版本文件夹内归档资产清单：")
-    print("① 最优xgb模型  ② 数据scaler  ③ 特征列表txt  ④ 训练元信息json  ⑤ 评估指标json")
-    print("=" * 70)
+        logger.info(f"2. SHAP重要性图：{shap_img_save}")
+        logger.info(f"3. XGB特征重要性图：{feat_img_save}")
+    logger.info("版本文件夹内归档资产清单：")
+    logger.info("① 最优xgb模型  ② 数据scaler  ③ 特征列表txt  ④ 训练元信息json  ⑤ 评估指标json")
+    logger.info("=" * 70)

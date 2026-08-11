@@ -1,13 +1,10 @@
 import sys
-import logging
+import pandas as pd
+from flask import Flask, request, jsonify
 
 # 将当前目录加入python模块搜索路径，保证config、src模块可以正常导入
 sys.path.append(".")
-
-from flask import Flask, request, jsonify
-import pandas as pd
-
-# 导入预测业务函数：单样本预测、批量预测、加载模型全套资产
+from src.logger import logger
 from src.predict import (
     predict,
     predict_batch,
@@ -15,19 +12,6 @@ from src.predict import (
 )
 # 导入配置：默认使用的模型版本
 from config.settings import DEFAULT_MODEL_VERSION
-
-
-# ==========================
-# 日志模块配置
-# 设计目的：统一收集服务运行信息与异常堆栈，方便线上问题排查，后续可扩展落地写入磁盘文件
-# ==========================
-logging.basicConfig(
-    level=logging.INFO,  # 日志级别：INFO及以上级别日志都会输出
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",  # 日志输出格式：时间、日志器名、日志级别、日志内容
-    datefmt="%Y-%m-%d %H:%M:%S"  # 时间字段格式化
-)
-# 创建本推理服务专属日志对象
-logger = logging.getLogger("churn_infer_service")
 
 
 # ==========================
@@ -95,8 +79,7 @@ try:
 
 except Exception as e:
     MODEL_LOADED = False
-    # critical级别日志，打印完整异常堆栈，方便定位启动失败原因
-    logger.critical(f"模型加载失败:{str(e)}", exc_info=True)
+    logger.error(f"模型加载失败:{str(e)}", exc_info=True)
 
 
 # ==========================
@@ -124,10 +107,11 @@ def api_predict():
         # 使用silent=True，解析JSON失败返回None，不直接抛出Flask原生异常
         # 目的：所有非法请求统一进入自定义校验逻辑，输出项目统一格式JSON错误，屏蔽框架原生报错
         req_json = request.get_json(silent=True)
+        logger.info(f"收到单样本预测请求，原始入参：{req_json}")
 
         # 请求不是合法json
         if req_json is None:
-            return make_response(400, "请求必须为JSON格式")
+            logger.warning("收到非法JSON请求")
 
         # 严格校验请求顶层必须是JSON对象，拒绝JSON数组，防止调用方传错外层结构
         if not isinstance(req_json, dict):
@@ -135,6 +119,7 @@ def api_predict():
 
         # 判断请求体内是否存在features字段
         if "features" not in req_json:
+            logger.warning("预测请求缺少features字段")
             return make_response(400, "缺少features字段")
 
         features = req_json["features"]
@@ -152,6 +137,7 @@ def api_predict():
         raw_df = pd.DataFrame([features])
         # 调用业务预测函数，内部读取全局模型缓存
         result = predict(raw_df, MODEL_VERSION)
+        logger.info(f"单样本推理完成，预测结果：{result}")
 
         return make_response(0, "success", result)
 
@@ -189,9 +175,10 @@ def api_batch_predict():
         # 使用silent=True，解析JSON失败返回None，不直接抛出Flask原生异常
         # 目的：所有非法请求统一进入自定义校验逻辑，输出项目统一格式JSON错误，屏蔽框架原生报错
         req_json = request.get_json(silent=True)
+        logger.info(f"收到批量预测请求，请求数据：{req_json}")
 
         if req_json is None:
-            return make_response(400, "请求必须JSON格式")
+            logger.warning("收到非法JSON请求")
 
         # 严格校验请求顶层必须是JSON对象，拒绝JSON数组
         if not isinstance(req_json, dict):
@@ -223,6 +210,7 @@ def api_batch_predict():
         raw_df = pd.DataFrame(features_list)
         # 调用批量预测业务函数，内部读取全局模型缓存
         result = predict_batch(raw_df, MODEL_VERSION)
+        logger.info(f"批量推理完成，样本量：{len(features_list)}")
 
         return make_response(0, "success", result)
 
@@ -244,6 +232,7 @@ def health_check():
     服务健康检查接口
     返回服务运行状态、使用的模型版本、模型是否加载成功
     """
+    logger.info("收到健康检查请求")
     return make_response(
         0,
         "service ok",
@@ -260,6 +249,7 @@ def health_check():
 # 注意：Gunicorn生产部署不会执行本块代码，仅直接导入app对象
 # ==========================
 if __name__ == "__main__":
+    logger.info("Flask推理服务本地启动开始，监听 0.0.0.0:5000")
     app.run(
         host="0.0.0.0",  # 监听全部网卡，允许局域网其他机器访问
         port=5000,

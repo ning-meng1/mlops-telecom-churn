@@ -94,3 +94,70 @@ VERSION_SCALER_NAME = "std_scaler.pkl"             # 特征标准化器
 VERSION_FEATURE_TXT = "train_feature_columns.txt"  # 训练特征名列表
 VERSION_META_JSON = "train_metadata.json"          # 训练元数据：种子、超参、训练时间
 VERSION_EVAL_JSON = "eval_metrics.json"            # 模型评估指标
+
+# ===================== API输入校验配置 =====================
+
+
+# API预测接口必填字段
+# 必须和训练阶段最终特征保持一致
+
+REQUIRED_FEATURES = [
+
+    "gender",
+    "SeniorCitizen",
+    "Partner",
+    "Dependents",
+    "tenure",
+    "PhoneService",
+    "MultipleLines",
+    "InternetService",
+    "OnlineSecurity",
+    "OnlineBackup",
+    "DeviceProtection",
+    "TechSupport",
+    "StreamingTV",
+    "StreamingMovies",
+    "Contract",
+    "PaperlessBilling",
+    "PaymentMethod",
+    "MonthlyCharges",
+    "TotalCharges"
+
+]
+
+
+# 数值类型字段范围校验
+#
+# 目的：
+# 1. 防止非法请求进入模型
+# 2. 防止明显异常数据影响预测结果
+
+FEATURE_RANGE_RULES = {
+
+
+    # 老年用户标识
+    "SeniorCitizen": (
+        0,
+        1
+    ),
+
+
+    # 入网月份
+    "tenure": (
+        0,
+        100
+    ),
+
+
+    # 月消费金额
+    "MonthlyCharges": (
+        0,
+        1000
+    ),
+    # 总消费金额
+    "TotalCharges": (
+        0,
+        100000
+    )
+}
+

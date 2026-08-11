@@ -4,17 +4,17 @@ from config.settings import BASE_DIR
 # 绑定监听地址、端口
 bind = "0.0.0.0:5000"
 # 工作进程数：通用经验公式 CPU核心数*2+1；本地调试可3，服务器根据CPU调整
-workers = 3
+workers = 1
 # 同步工作模式，兼容性最好，无需额外安装协程库
 worker_class = "sync"
 # 单进程最大并发连接数
 worker_connections = 1000
 
 # ⭐关键优化：预加载应用，主进程先加载模型，子进程共享，避免多进程重复加载XGB模型，大幅降低内存占用
-preload_app = True
+preload_app = False
 
 # 超时管控；模型推理存在耗时，适当放宽超时
-timeout = 90
+timeout = 120
 graceful_timeout = 30
 keepalive = 5
 

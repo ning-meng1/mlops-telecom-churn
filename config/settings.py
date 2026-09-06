@@ -126,38 +126,120 @@ REQUIRED_FEATURES = [
 ]
 
 
-# 数值类型字段范围校验
-#
-# 目的：
-# 1. 防止非法请求进入模型
-# 2. 防止明显异常数据影响预测结果
+# =====================
+# 数值字段范围校验
+# =====================
 
 FEATURE_RANGE_RULES = {
 
+    # 老年用户标识，只允许0/1
+    "SeniorCitizen": (0, 1),
 
-    # 老年用户标识
-    "SeniorCitizen": (
-        0,
-        1
-    ),
-
-
-    # 入网月份
-    "tenure": (
-        0,
-        100
-    ),
-
+    # Telco数据集实际业务范围：0~72个月
+    "tenure": (0, 72),
 
     # 月消费金额
-    "MonthlyCharges": (
-        0,
-        1000
-    ),
+    # Telco数据集中最大值约118.75
+    # 留出一定业务扩展空间
+    "MonthlyCharges": (0, 200),
+
     # 总消费金额
-    "TotalCharges": (
-        0,
-        100000
-    )
+    # Telco数据集中最大值约8684.8
+    # 留出一定业务扩展空间
+    "TotalCharges": (0, 20000)
+}
+
+
+# =====================
+# 枚举字段合法取值
+# =====================
+
+FEATURE_ALLOWED_VALUES = {
+
+    "gender": {
+        "Male",
+        "Female"
+    },
+
+    "Partner": {
+        "Yes",
+        "No"
+    },
+
+    "Dependents": {
+        "Yes",
+        "No"
+    },
+
+    "PhoneService": {
+        "Yes",
+        "No"
+    },
+
+    "MultipleLines": {
+        "Yes",
+        "No",
+        "No phone service"
+    },
+
+    "InternetService": {
+        "DSL",
+        "Fiber optic",
+        "No"
+    },
+
+    "OnlineSecurity": {
+        "Yes",
+        "No",
+        "No internet service"
+    },
+
+    "OnlineBackup": {
+        "Yes",
+        "No",
+        "No internet service"
+    },
+
+    "DeviceProtection": {
+        "Yes",
+        "No",
+        "No internet service"
+    },
+
+    "TechSupport": {
+        "Yes",
+        "No",
+        "No internet service"
+    },
+
+    "StreamingTV": {
+        "Yes",
+        "No",
+        "No internet service"
+    },
+
+    "StreamingMovies": {
+        "Yes",
+        "No",
+        "No internet service"
+    },
+
+    "Contract": {
+        "Month-to-month",
+        "One year",
+        "Two year"
+    },
+
+    "PaperlessBilling": {
+        "Yes",
+        "No"
+    },
+
+    "PaymentMethod": {
+        "Electronic check",
+        "Mailed check",
+        "Bank transfer (automatic)",
+        "Credit card (automatic)"
+    }
 }
 

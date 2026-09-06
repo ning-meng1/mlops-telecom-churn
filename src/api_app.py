@@ -1,32 +1,32 @@
-import sys
-import pandas as pd
-
 from flask import Flask, request, jsonify
-
-sys.path.append(".")
 
 from src.logger import logger
 
-from src.predict import (
-    predict,
-    predict_batch,
-    load_model_assets
+from src.service import (
+    predict_single,
+    predict_batch_service,
+    init_model,
+    is_model_loaded,
+    get_model_version
 )
 
-from src.validator import validate_features
 
-from config.settings import (
-    DEFAULT_MODEL_VERSION
-)
-
+# =========================
+# Flask应用初始化
+# =========================
 
 app = Flask(__name__)
 
 
-MODEL_VERSION = DEFAULT_MODEL_VERSION
-
+# =========================
+# 统一响应
+# =========================
 
 def make_response(code, msg, data=None):
+    """
+    统一API响应格式。
+    """
+
     return jsonify({
         "code": code,
         "msg": msg,
@@ -35,32 +35,7 @@ def make_response(code, msg, data=None):
 
 
 # =========================
-# 模型预加载
-# =========================
-
-MODEL_LOADED = False
-
-try:
-
-    load_model_assets(
-        MODEL_VERSION
-    )
-
-    MODEL_LOADED = True
-
-    logger.info(
-        f"模型加载成功: {MODEL_VERSION}"
-    )
-
-except Exception:
-
-    logger.exception(
-        f"模型加载失败: {MODEL_VERSION}"
-    )
-
-
-# =========================
-# 单预测接口
+# 单样本预测接口
 # =========================
 
 @app.route(
@@ -68,8 +43,21 @@ except Exception:
     methods=["POST"]
 )
 def api_predict():
+    """
+    单样本用户流失预测接口。
 
-    if not MODEL_LOADED:
+    API层只负责：
+    1. 接收HTTP请求
+    2. 检查请求结构
+    3. 调用service层
+    4. 返回HTTP响应
+    """
+
+    # -------------------------
+    # 模型状态检查
+    # -------------------------
+
+    if not is_model_loaded():
 
         return make_response(
             503,
@@ -78,12 +66,16 @@ def api_predict():
 
     try:
 
+        # -------------------------
+        # JSON解析
+        # -------------------------
+
         req_json = request.get_json(
             silent=True
         )
 
         logger.info(
-            f"收到预测请求: {req_json}"
+            f"收到单样本预测请求: {req_json}"
         )
 
         # -------------------------
@@ -114,39 +106,11 @@ def api_predict():
         features = req_json["features"]
 
         # -------------------------
-        # 参数校验
+        # 调用Service层
         # -------------------------
 
-        error = validate_features(
+        result = predict_single(
             features
-        )
-
-        if error:
-
-            logger.warning(
-                f"参数校验失败: {error}"
-            )
-
-            return make_response(
-                400,
-                error
-            )
-
-        # -------------------------
-        # 构造DataFrame
-        # -------------------------
-
-        raw_df = pd.DataFrame(
-            [features]
-        )
-
-        # -------------------------
-        # 模型预测
-        # -------------------------
-
-        result = predict(
-            raw_df,
-            MODEL_VERSION
         )
 
         return make_response(
@@ -155,17 +119,29 @@ def api_predict():
             result
         )
 
+    # -------------------------
+    # 参数错误
+    # -------------------------
+
     except ValueError as e:
+
+        logger.warning(
+            f"单样本请求参数错误: {str(e)}"
+        )
 
         return make_response(
             400,
             str(e)
         )
 
+    # -------------------------
+    # 未预期异常
+    # -------------------------
+
     except Exception:
 
         logger.exception(
-            "预测过程中发生未预期异常"
+            "单样本预测过程中发生未预期异常"
         )
 
         return make_response(
@@ -183,8 +159,15 @@ def api_predict():
     methods=["POST"]
 )
 def api_batch_predict():
+    """
+    批量用户流失预测接口。
+    """
 
-    if not MODEL_LOADED:
+    # -------------------------
+    # 模型状态检查
+    # -------------------------
+
+    if not is_model_loaded():
 
         return make_response(
             503,
@@ -193,8 +176,16 @@ def api_batch_predict():
 
     try:
 
+        # -------------------------
+        # JSON解析
+        # -------------------------
+
         req_json = request.get_json(
             silent=True
+        )
+
+        logger.info(
+            f"收到批量预测请求: {req_json}"
         )
 
         # -------------------------
@@ -227,64 +218,11 @@ def api_batch_predict():
         ]
 
         # -------------------------
-        # 类型校验
+        # 调用Service层
         # -------------------------
 
-        if not isinstance(
-            features_list,
-            list
-        ):
-
-            return make_response(
-                400,
-                "features_list必须数组"
-            )
-
-        # -------------------------
-        # 空数组校验
-        # -------------------------
-
-        if len(features_list) == 0:
-
-            return make_response(
-                400,
-                "预测数据不能为空"
-            )
-
-        # -------------------------
-        # 每条数据校验
-        # -------------------------
-
-        for index, item in enumerate(
+        result = predict_batch_service(
             features_list
-        ):
-
-            error = validate_features(
-                item
-            )
-
-            if error:
-
-                return make_response(
-                    400,
-                    f"第{index}条数据错误: {error}"
-                )
-
-        # -------------------------
-        # 构造DataFrame
-        # -------------------------
-
-        raw_df = pd.DataFrame(
-            features_list
-        )
-
-        # -------------------------
-        # 批量预测
-        # -------------------------
-
-        result = predict_batch(
-            raw_df,
-            MODEL_VERSION
         )
 
         return make_response(
@@ -292,6 +230,25 @@ def api_batch_predict():
             "success",
             result
         )
+
+    # -------------------------
+    # 参数错误
+    # -------------------------
+
+    except ValueError as e:
+
+        logger.warning(
+            f"批量预测请求参数错误: {str(e)}"
+        )
+
+        return make_response(
+            400,
+            str(e)
+        )
+
+    # -------------------------
+    # 未预期异常
+    # -------------------------
 
     except Exception:
 
@@ -314,24 +271,33 @@ def api_batch_predict():
     methods=["GET"]
 )
 def health_check():
+    """
+    服务健康检查。
+    """
 
     return make_response(
         0,
         "service ok",
         {
             "service_status": "running",
-            "model_version": MODEL_VERSION,
-            "model_loaded": MODEL_LOADED
+            "model_version": get_model_version(),
+            "model_loaded": is_model_loaded()
         }
     )
 
 
 # =========================
-# 全局异常处理
+# Flask全局异常处理
 # =========================
 
 @app.errorhandler(Exception)
 def handle_global_exception(e):
+    """
+    全局异常兜底。
+
+    对外隐藏详细异常信息，
+    完整堆栈写入日志。
+    """
 
     logger.exception(
         "未捕获的全局异常"
@@ -342,12 +308,25 @@ def handle_global_exception(e):
         "服务器内部异常"
     )
 
+@app.route("/test_error", methods=["GET"])
+def test_error():
+    raise Exception("Day24测试异常")
 
 # =========================
-# 启动服务
+# 本地开发启动
 # =========================
 
 if __name__ == "__main__":
+
+    # 如果模型没有成功加载，
+    # 尝试重新初始化一次
+    if not is_model_loaded():
+
+        logger.warning(
+            "检测到模型未加载，尝试重新加载"
+        )
+
+        init_model()
 
     app.run(
         host="0.0.0.0",
@@ -355,3 +334,4 @@ if __name__ == "__main__":
         debug=False,
         threaded=True
     )
+

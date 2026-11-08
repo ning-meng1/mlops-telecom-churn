@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 全局默认模型版本
-DEFAULT_MODEL_VERSION = "v2"
+DEFAULT_MODEL_VERSION = "v1"
 
 # 基础文件夹路径
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -31,6 +31,7 @@ SERVICE_PORT = 5000
 # 全局固定随机种子，保障实验可复现
 DEFAULT_SEED = 42
 TEST_SIZE = 0.2
+VAL_SEED_OFFSET=1
 # 日志配置
 LOG_CONFIG = {
     "log_file": os.path.join(LOG_PATH, "app.log"),
@@ -94,7 +95,7 @@ VERSION_SCALER_NAME = "std_scaler.pkl"             # 特征标准化器
 VERSION_FEATURE_TXT = "train_feature_columns.txt"  # 训练特征名列表
 VERSION_META_JSON = "train_metadata.json"          # 训练元数据：种子、超参、训练时间
 VERSION_EVAL_JSON = "eval_metrics.json"            # 模型评估指标
-
+VERSION_MEDIAN_NAME="median_dict.pkl"              # 模型中位数填充
 # ===================== API输入校验配置 =====================
 
 

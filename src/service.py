@@ -11,25 +11,18 @@ from src.predict import (
 from src.validator import validate_features
 
 from config.settings import DEFAULT_MODEL_VERSION
-
-
 # =========================
 # 模型服务配置
 # =========================
 
 MODEL_VERSION = DEFAULT_MODEL_VERSION
-
 MODEL_LOADED = False
-
-
 # =========================
 # 模型预加载
 # =========================
-
 def init_model():
     """
     服务启动时加载模型。
-
     返回：
         True  -> 模型加载成功
         False -> 模型加载失败
@@ -50,7 +43,6 @@ def init_model():
         )
 
         return True
-
     except Exception:
 
         MODEL_LOADED = False
@@ -60,28 +52,19 @@ def init_model():
         )
 
         return False
-
-
 # =========================
 # 模型状态
 # =========================
-
 def is_model_loaded():
     """
     返回当前模型是否加载成功。
     """
-
     return MODEL_LOADED
-
-
 def get_model_version():
     """
     返回当前模型版本。
     """
-
     return MODEL_VERSION
-
-
 # =========================
 # 单样本预测业务
 # =========================

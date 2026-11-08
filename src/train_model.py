@@ -28,7 +28,9 @@ from config.settings import (
     VERSION_SCALER_NAME,
     VERSION_FEATURE_TXT,
     VERSION_META_JSON,
-    VERSION_EVAL_JSON
+    VERSION_EVAL_JSON,
+    VERSION_MEDIAN_NAME
+
 )
 from src.data_process import get_full_dataset
 from src.logger import logger
@@ -60,36 +62,37 @@ logger.info(f"是否开启SHAP绘图: {DRAW_SHAP}")
 logger.info("=" * 70)
 
 
-def train_single_model(params, X_train, X_test, y_train, y_test):
+def train_single_model(params, X_train, X_val, y_train, y_val):
     """
     单组超参训练XGBoost模型
     :param params: XGB超参字典
-    :return: 训练完成模型 + 测试集评估指标
+    :return: 训练完成模型 + 验证集评估指标
     """
     model = XGBClassifier(
         random_state=RUN_SEED,
         eval_metric=TRAIN_CONFIG.get("eval_metric", "logloss"),
         scale_pos_weight=TRAIN_CONFIG.get("scale_pos_weight", 1),
+        early_stopping_rounds=20,
         **params
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train,eval_set=[(X_val,y_val)])
 
-    y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)[:, 1]
+    y_val_pred = model.predict(X_val)
+    y_val_pred_proba = model.predict_proba(X_val)[:, 1]
 
     metrics = {
         "params": params,
-        "accuracy": round(accuracy_score(y_test, y_pred), 4),
-        "auc": round(roc_auc_score(y_test, y_pred_proba), 4),
-        "f1": round(f1_score(y_test, y_pred), 4)
+        "accuracy_val": round(accuracy_score(y_val, y_val_pred), 4),
+        "auc_val": round(roc_auc_score(y_val, y_val_pred_proba), 4),
+        "f1_val": round(f1_score(y_val, y_val_pred), 4)
     }
     return model, metrics
 
 
 def hyperparameter_tuning():
     """网格搜索遍历超参数，筛选最优模型并归档全部产物"""
-    logger.info("开始加载训练数据集与划分训练/测试集")
-    X_train, X_test, y_train, y_test, scaler, features = get_full_dataset(fix_seed=RUN_SEED)
+    logger.info("开始加载训练数据集与划分训练/测试集/验证集")
+    X_train, X_val, X_test, y_train, y_val, y_test, scaler, median_dict, feature_cols = get_full_dataset(fix_seed=RUN_SEED)
     logger.info(f"数据集加载完成，训练集样本：{X_train.shape[0]}，测试集样本：{X_test.shape[0]}")
 
     param_grid = ParameterGrid(PARAM_GRID)
@@ -106,13 +109,13 @@ def hyperparameter_tuning():
     for idx, param in enumerate(param_grid):
         logger.info(f"\n[{idx + 1}/{total_num}] 当前测试超参：{param}")
         try:
-            model, metric = train_single_model(param, X_train, X_test, y_train, y_test)
+            model, metric = train_single_model(param, X_train, X_val, y_train, y_val)
             all_result.append(metric)
-            logger.info(f"本组指标 -> AUC:{metric['auc']} ACC:{metric['accuracy']} F1:{metric['f1']}")
+            logger.info(f"本组指标 -> AUC:{metric['auc_val']} ACC:{metric['accuracy_val']} F1:{metric['f1_val']}")
 
             # 以AUC作为最优模型筛选标准
-            if metric["auc"] > best_auc:
-                best_auc = metric["auc"]
+            if metric["auc_val"] > best_auc:
+                best_auc = metric["auc_val"]
                 best_model = model
                 best_params = param
                 logger.info(f"更新最优模型，当前最高AUC={best_auc:.4f}")
@@ -122,6 +125,15 @@ def hyperparameter_tuning():
 
     logger.info(f"\n===== 网格搜索全部完成 =====")
     logger.info(f"最优超参数：{best_params}")
+    #验证集测试完成后开始进入测试集环节
+    y_test_pred = best_model.predict(X_test)
+    y_test_proba = best_model.predict_proba(X_test)[:, 1]
+
+    test_acc = round(accuracy_score(y_test, y_test_pred), 4)
+    test_auc = round(roc_auc_score(y_test, y_test_proba), 4)
+    test_f1 = round(f1_score(y_test, y_test_pred), 4)
+
+    logger.info(f"测试集指标 | acc={test_acc}, auc={test_auc}, f1={test_f1}")
     logger.info(f"最优验证集AUC：{best_auc:.4f}")
 
     # 创建当前版本独立归档文件夹
@@ -136,11 +148,12 @@ def hyperparameter_tuning():
     # 1. 保存最优模型与标准化器
     joblib.dump(best_model, os.path.join(version_dir, VERSION_MODEL_NAME))
     joblib.dump(scaler, os.path.join(version_dir, VERSION_SCALER_NAME))
+    joblib.dump(median_dict,os.path.join(version_dir,VERSION_MEDIAN_NAME))
     logger.info("最优模型、scaler保存完成")
 
     # 2. 保存特征名称列表，推理阶段保证特征顺序对齐
     with open(os.path.join(version_dir, VERSION_FEATURE_TXT), "w", encoding="utf-8") as f:
-        f.write("\n".join(features))
+        f.write("\n".join(feature_cols))
     logger.info("特征列表文件保存完成")
 
     # 3. 写入训练元数据，用于实验追溯、复现
@@ -158,11 +171,10 @@ def hyperparameter_tuning():
     logger.info("训练元信息meta.json保存完成")
 
     # 4. 保存最优评估指标
-    best_metric_record = max(all_result, key=lambda x: x["auc"])
     eval_result_json = {
-        "accuracy": best_metric_record["accuracy"],
-        "auc": best_metric_record["auc"],
-        "f1_score": best_metric_record["f1"]
+        "accuracy": test_acc,
+        "auc": test_auc,
+        "f1_score": test_f1
     }
     with open(os.path.join(version_dir, VERSION_EVAL_JSON), "w", encoding="utf-8") as f:
         json.dump(eval_result_json, f, indent=2)
@@ -174,7 +186,7 @@ def hyperparameter_tuning():
 
     logger.info(f"\n版本{RUN_VERSION}全套模型文件归档完毕，路径：{version_dir}")
 
-    return best_model, X_test, features, feat_img_path, shap_img_path, csv_result_path, version_dir, eval_result_json
+    return best_model, X_test, feature_cols, feat_img_path, shap_img_path, csv_result_path, version_dir, eval_result_json
 
 
 def plot_shap_bar(model, X_test_data, feature_names, save_path):
@@ -219,7 +231,7 @@ if __name__ == "__main__":
     logger.info("✅ 模型训练+调参+版本归档全流程执行完毕！")
     logger.info(f"归档版本号：{RUN_VERSION}")
     logger.info(f"模型存储目录：{archive_folder}")
-    logger.info(f"验证集最终指标：{eval_dict}")
+    logger.info(f"测试集最终指标：{eval_dict}")
     logger.info("外部产出文件：")
     logger.info(f"1. 超参搜索明细CSV：{csv_path}")
     if DRAW_SHAP:

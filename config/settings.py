@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 全局默认模型版本
-DEFAULT_MODEL_VERSION = "v1"
+DEFAULT_MODEL_VERSION = "v3"
 
 # 基础文件夹路径
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -44,7 +44,8 @@ TRAIN_CONFIG = {
     "random_state": DEFAULT_SEED,
     "test_size": 0.2,
     "eval_metric": "logloss",
-    "stratify": True  # 分层抽样，保障分类任务训练/测试集分布一致
+    "stratify": True , # 分层抽样，保障分类任务训练/测试集分布一致
+    "scale_pos_weight": 5
 }
 
 # XGBoost网格搜索超参范围

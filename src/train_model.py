@@ -1,12 +1,13 @@
 import sys
 sys.path.append('.')
-
 # ========== 标准库导入 ==========
 import argparse
 import joblib
 import os
 import json
 import random
+import mlflow
+import mlflow.xgboost
 from datetime import datetime
 
 # ========== 第三方数据分析库导入 ==========
@@ -30,7 +31,6 @@ from config.settings import (
     VERSION_META_JSON,
     VERSION_EVAL_JSON,
     VERSION_MEDIAN_NAME
-
 )
 from src.data_process import get_full_dataset
 from src.logger import logger
@@ -75,7 +75,7 @@ def train_single_model(params, X_train, X_val, y_train, y_val):
         early_stopping_rounds=20,
         **params
     )
-    model.fit(X_train, y_train,eval_set=[(X_val,y_val)])
+    model.fit(X_train, y_train, eval_set=[(X_val, y_val)])
 
     y_val_pred = model.predict(X_val)
     y_val_pred_proba = model.predict_proba(X_val)[:, 1]
@@ -102,6 +102,10 @@ def hyperparameter_tuning():
     best_model = None
     best_params = None
 
+    # 生成本轮网格搜索统一批次标记，用来给所有run打tag
+    grid_batch_id = f"{RUN_VERSION}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    logger.info(f"本轮网格搜索batch标记：{grid_batch_id}")
+
     logger.info("===== 开始超参数网格遍历训练 =====")
     total_num = len(param_grid)
     logger.info(f"待遍历超参组合总数：{total_num}")
@@ -109,8 +113,25 @@ def hyperparameter_tuning():
     for idx, param in enumerate(param_grid):
         logger.info(f"\n[{idx + 1}/{total_num}] 当前测试超参：{param}")
         try:
-            model, metric = train_single_model(param, X_train, X_val, y_train, y_val)
-            all_result.append(metric)
+            # 每一组参数单独一个mlflow run
+            with mlflow.start_run():
+                # 打上标签，方便后续筛选同一批实验
+                mlflow.set_tag("grid_batch_id", grid_batch_id)
+                mlflow.set_tag("model_version", RUN_VERSION)
+                mlflow.set_tag("seed", RUN_SEED)
+                mlflow.set_tag("run_index", idx + 1)
+
+                # 记录当前这一组超参数
+                mlflow.log_params(param)
+
+                model, metric = train_single_model(param, X_train, X_val, y_train, y_val)
+                all_result.append(metric)
+
+                # 记录验证集指标
+                mlflow.log_metric("auc_val", metric["auc_val"])
+                mlflow.log_metric("accuracy_val", metric["accuracy_val"])
+                mlflow.log_metric("f1_val", metric["f1_val"])
+
             logger.info(f"本组指标 -> AUC:{metric['auc_val']} ACC:{metric['accuracy_val']} F1:{metric['f1_val']}")
 
             # 以AUC作为最优模型筛选标准
@@ -119,6 +140,8 @@ def hyperparameter_tuning():
                 best_model = model
                 best_params = param
                 logger.info(f"更新最优模型，当前最高AUC={best_auc:.4f}")
+
+
         except Exception as e:
             logger.error(f"该组参数训练失败，自动跳过，错误信息：{str(e)}", exc_info=True)
             continue
@@ -148,7 +171,7 @@ def hyperparameter_tuning():
     # 1. 保存最优模型与标准化器
     joblib.dump(best_model, os.path.join(version_dir, VERSION_MODEL_NAME))
     joblib.dump(scaler, os.path.join(version_dir, VERSION_SCALER_NAME))
-    joblib.dump(median_dict,os.path.join(version_dir,VERSION_MEDIAN_NAME))
+    joblib.dump(median_dict, os.path.join(version_dir, VERSION_MEDIAN_NAME))
     logger.info("最优模型、scaler保存完成")
 
     # 2. 保存特征名称列表，推理阶段保证特征顺序对齐
@@ -186,6 +209,27 @@ def hyperparameter_tuning():
 
     logger.info(f"\n版本{RUN_VERSION}全套模型文件归档完毕，路径：{version_dir}")
 
+    # ========== 单独一条run，记录最终测试集指标（不和调参循环混在一起） ==========
+    with mlflow.start_run(run_name="best_model-final-test"):
+        mlflow.set_tag("grid_batch_id", grid_batch_id)
+        mlflow.set_tag("model_version", RUN_VERSION)
+        mlflow.set_tag("seed", RUN_SEED)
+        mlflow.set_tag("run_type", "best_final")
+        mlflow.set_tag("exp_group","C_weight_5")
+        mlflow.log_params(best_params)
+        mlflow.log_metric("test_auc", test_auc)
+        mlflow.log_metric("test_f1", test_f1)
+        mlflow.log_metric("test_acc", test_acc)
+        mlflow.log_artifact(os.path.join(version_dir, VERSION_MODEL_NAME))
+        mlflow.log_artifact(os.path.join(version_dir, VERSION_SCALER_NAME))
+        mlflow.log_artifact(os.path.join(version_dir, VERSION_MEDIAN_NAME))
+        mlflow.log_artifact(os.path.join(version_dir, VERSION_FEATURE_TXT))
+        mlflow.log_artifact(os.path.join(version_dir, VERSION_EVAL_JSON))
+        mlflow.log_artifact(os.path.join(version_dir, VERSION_META_JSON))
+
+    logger.info("✅ 测试集指标已经单独写入MLflow一条独立run")
+
+
     return best_model, X_test, feature_cols, feat_img_path, shap_img_path, csv_result_path, version_dir, eval_result_json
 
 
@@ -218,9 +262,12 @@ def plot_xgb_feature_importance(model, feature_names, save_path):
 # ==================== 程序入口 ====================
 if __name__ == "__main__":
     logger.info("执行训练主流程 hyperparameter_tuning")
+    # 档案柜：所有实验都放在这个实验名下
+    mlflow.set_experiment("电信用户流失预测实验")
+
+    # 直接调用，不再外层包裹mlflow start_run
     model, X_test, feat_list, feat_img_save, shap_img_save, csv_path, archive_folder, eval_dict = hyperparameter_tuning()
 
-    # 按需生成可视化图片
     if DRAW_SHAP:
         plot_shap_bar(model, X_test, feat_list, shap_img_save)
         plot_xgb_feature_importance(model, feat_list, feat_img_save)

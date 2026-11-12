@@ -1,26 +1,25 @@
 # 虚拟环境
 venv/
+.venv_backup/
 
-# 编译缓存文件
+# 编译缓存
 __pycache__/
 *.pyc
 
-# 模型、序列化文件
-*.pkl
-*.pickle
-models/
 
-# 日志文件
+
+# 日志
 logs/
 *.log
 
-# 系统文件
+# 系统垃圾
 .DS_Store
 Thumbs.db
 
-# IDE配置文件
+# IDE
 .idea/
 .vscode/
-Git/
-assets/
-data/
+
+# MLflow实验缓存（你的mlruns在src下面）
+src/mlruns/
+

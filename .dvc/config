@@ -1,0 +1,4 @@
+[core]
+    remote = local_demo
+['remote "local_demo"']
+    url = D:\mlops-lite\dvc_remote_storage

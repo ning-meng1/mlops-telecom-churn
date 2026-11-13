@@ -6,8 +6,6 @@ venv/
 __pycache__/
 *.pyc
 
-
-
 # 日志
 logs/
 *.log
@@ -16,10 +14,24 @@ logs/
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE配置
 .idea/
 .vscode/
 
-# MLflow实验缓存（你的mlruns在src下面）
+# MLflow实验缓存
 src/mlruns/
+mlruns/
 
+# DVC本地远程存储
+dvc_remote_storage/
+
+# DVC管理的数据文件（git不跟踪，由DVC接管）
+data/telco_churn_clean.csv
+
+# 模型文件目录
+models/
+
+# 静态资源、报告资产
+assets/
+src/assets/
+Git/

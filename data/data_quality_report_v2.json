@@ -1,0 +1,128 @@
+{
+  "version_tag": "v2",
+  "file_path": "D:\\mlops-lite\\data\\telco_churn_clean.csv",
+  "total_samples": 7043,
+  "total_cols": 22,
+  "check_passed": true,
+  "check_items": {
+    "missing_check": {
+      "threshold": "15.0%",
+      "alert": false,
+      "detail": {
+        "customerID": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "gender": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "SeniorCitizen": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "Partner": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "Dependents": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "tenure": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "PhoneService": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "MultipleLines": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "InternetService": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "OnlineSecurity": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "OnlineBackup": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "DeviceProtection": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "TechSupport": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "StreamingTV": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "StreamingMovies": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "Contract": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "PaperlessBilling": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "PaymentMethod": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "MonthlyCharges": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "TotalCharges": {
+          "missing_count": 11,
+          "missing_rate": 0.0016
+        },
+        "Churn": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        },
+        "avg_monthly_charges": {
+          "missing_count": 0,
+          "missing_rate": 0.0
+        }
+      }
+    },
+    "numeric_negative_check": {
+      "alert": false,
+      "detail": {
+        "tenure": {
+          "negative_count": 0
+        },
+        "MonthlyCharges": {
+          "negative_count": 0
+        },
+        "TotalCharges": {
+          "negative_count": 0
+        },
+        "avg_monthly_charges": {
+          "negative_count": 0
+        }
+      }
+    },
+    "target_dist_check": {
+      "threshold": "85.0%",
+      "alert": false,
+      "dist": {
+        "0": 0.7346,
+        "1": 0.2654
+      }
+    }
+  }
+}

@@ -8,13 +8,15 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 全局默认模型版本
-DEFAULT_MODEL_VERSION = "v3"
+DEFAULT_MODEL_VERSION = "v6"
 
 # 基础文件夹路径
 DATA_DIR = os.path.join(BASE_DIR, "data")
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 LOG_PATH = os.path.join(BASE_DIR, "logs")
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+
+CLEAN_DATA_PATH = os.path.join(DATA_DIR, "telco_churn_clean.csv")
 
 # 自动创建项目目录
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -70,7 +72,7 @@ BINARY_COLS = ['gender', 'Partner', 'Dependents', 'PhoneService', 'PaperlessBill
 MULTI_CAT_COLS = [
     'MultipleLines', 'InternetService', 'OnlineSecurity', 'OnlineBackup',
     'DeviceProtection', 'TechSupport', 'StreamingTV', 'StreamingMovies',
-    'Contract', 'PaymentMethod'
+    'Contract', 'PaymentMethod','tenure_group'
 ]
 # 建模前需要剔除的字段
 DROP_COLS = ['customerID']

@@ -194,9 +194,3 @@ def predict_batch_service(features_list):
 
     return result
 
-
-# =========================
-# 服务启动时加载模型
-# =========================
-
-init_model()

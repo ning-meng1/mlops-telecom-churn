@@ -24,4 +24,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pytest tests/ -v --ignore=tests/test_batch.py --ignore=tests/test_single.py
+          pytest tests/ -v

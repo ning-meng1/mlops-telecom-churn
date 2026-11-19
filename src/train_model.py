@@ -1,5 +1,6 @@
 import sys
 sys.path.append('.')
+
 # ========== 标准库导入 ==========
 import argparse
 import joblib
@@ -14,16 +15,19 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
-from sklearn.model_selection import ParameterGrid
+from sklearn.model_selection import ParameterGrid, train_test_split
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 import shap
+import matplotlib
+matplotlib.use('Agg')  # 后台无GUI稳定绘图，工业环境必加
 import matplotlib.pyplot as plt
 
 # ========== 项目内部模块导入 ==========
 from config.settings import (
     DEFAULT_SEED, DEFAULT_MODEL_VERSION,
     TRAIN_CONFIG, PARAM_GRID,
-    ASSETS_DIR,
+    ASSETS_DIR, CLEAN_DATA_PATH, TARGET_COL,
     get_version_storage_dir,
     VERSION_MODEL_NAME,
     VERSION_SCALER_NAME,
@@ -32,8 +36,9 @@ from config.settings import (
     VERSION_EVAL_JSON,
     VERSION_MEDIAN_NAME
 )
-from src.data_process import get_full_dataset
+from src.data_process import encode_multi_category, encode_binary_features
 from src.logger import logger
+from src.validation_feature import run_all_validation
 
 # ===========命令行参数解析===============
 parser = argparse.ArgumentParser(description="电信用户流失XGBoost训练脚本")
@@ -43,6 +48,7 @@ parser.add_argument("--version", type=str, default=DEFAULT_MODEL_VERSION, help="
 parser.add_argument("--enable_shap", action="store_true", help="开启SHAP可解释性绘图，关闭节省算力")
 
 args = parser.parse_args()
+
 # 全局运行参数
 RUN_SEED = args.seed
 RUN_VERSION = args.version
@@ -60,6 +66,62 @@ logger.info(f"固定随机种子: {RUN_SEED}")
 logger.info(f"模型归档版本: {RUN_VERSION}")
 logger.info(f"是否开启SHAP绘图: {DRAW_SHAP}")
 logger.info("=" * 70)
+
+# 训练前门禁B校验
+ok, report = run_all_validation()
+if not ok:
+    print("特征集校验失败，终止训练！")
+    exit(1)
+
+
+def load_and_split_clean_data(fix_seed: int, test_index_save_path: str):
+    """
+    方案B：读取v2版本清洗数据集，在训练脚本内完成编码、标准化、分层划分
+    划分规则：
+    1. 先切20%测试集，测试集索引持久化保存
+    2. 剩余80%，再分层切分为训练集(70%)、验证集(30%)
+    对应全局比例：train=0.56, val=0.24, test=0.2
+    """
+    # 读取版本化的clean数据集（已经清洗、衍生特征、Churn标签0/1，分类字段保留原始文本）
+    df = pd.read_csv(CLEAN_DATA_PATH)
+    logger.info(f"加载v2清洗数据集 shape={df.shape}")
+
+    y = df[TARGET_COL]
+    X = df.drop(columns=[TARGET_COL, "customerID"])
+
+    # ========== 补上二元编码！这一行是缺失的关键 ==========
+    X = encode_binary_features(X)
+    # 训练阶段才做多分类独热编码（方案B约定）
+    X = encode_multi_category(X)
+    feature_cols = list(X.columns)
+
+    # 第一步：拆分出20%测试集，分层抽样，保证标签分布一致
+    X_temp, X_test, y_temp, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=fix_seed, stratify=y
+    )
+    # 保存测试集索引，固定下来，后续复现、离线验证都用同一批测试样本
+    test_idx = X_test.index
+    np.save(test_index_save_path, test_idx)
+    logger.info(f"测试集索引已持久化保存：{test_index_save_path}")
+
+    # 第二步：剩下80%里面，再划分训练、验证
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_temp, y_temp, test_size=0.3, random_state=fix_seed, stratify=y_temp
+    )
+
+    # 标准化：只拿训练集拟合scaler，防止泄露
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_val = scaler.transform(X_val)
+    X_test = scaler.transform(X_test)
+
+    # 中位数填充字典（和原逻辑保持一致，兼容缺失兜底）
+    median_dict = {}
+    for col in feature_cols:
+        col_idx = feature_cols.index(col)
+        median_dict[col] = np.median(X_train[:, col_idx])
+
+    return X_train, X_val, X_test, y_train, y_val, y_test, scaler, median_dict, feature_cols
 
 
 def train_single_model(params, X_train, X_val, y_train, y_val):
@@ -92,7 +154,12 @@ def train_single_model(params, X_train, X_val, y_train, y_val):
 def hyperparameter_tuning():
     """网格搜索遍历超参数，筛选最优模型并归档全部产物"""
     logger.info("开始加载训练数据集与划分训练/测试集/验证集")
-    X_train, X_val, X_test, y_train, y_val, y_test, scaler, median_dict, feature_cols = get_full_dataset(fix_seed=RUN_SEED)
+    # 测试集索引文件路径，跟着模型版本走
+    test_idx_file = os.path.join(ASSETS_DIR, f"test_index_{RUN_VERSION}.npy")
+    X_train, X_val, X_test, y_train, y_val, y_test, scaler, median_dict, feature_cols = load_and_split_clean_data(
+        fix_seed=RUN_SEED,
+        test_index_save_path=test_idx_file
+    )
     logger.info(f"数据集加载完成，训练集样本：{X_train.shape[0]}，测试集样本：{X_test.shape[0]}")
 
     param_grid = ParameterGrid(PARAM_GRID)
@@ -140,7 +207,6 @@ def hyperparameter_tuning():
                 best_model = model
                 best_params = param
                 logger.info(f"更新最优模型，当前最高AUC={best_auc:.4f}")
-
 
         except Exception as e:
             logger.error(f"该组参数训练失败，自动跳过，错误信息：{str(e)}", exc_info=True)
@@ -227,8 +293,14 @@ def hyperparameter_tuning():
         mlflow.log_artifact(os.path.join(version_dir, VERSION_EVAL_JSON))
         mlflow.log_artifact(os.path.join(version_dir, VERSION_META_JSON))
 
-    logger.info("✅ 测试集指标已经单独写入MLflow一条独立run")
+        # ===== 先画图、保存，再上传=====
+        if DRAW_SHAP:
+            plot_shap_bar(best_model, X_test, feature_cols, shap_img_path)
+            plot_xgb_feature_importance(best_model, feature_cols, feat_img_path)
+            mlflow.log_artifact(feat_img_path, artifact_path="plots")
+            mlflow.log_artifact(shap_img_path, artifact_path="plots")
 
+    logger.info("✅ 测试集指标已经单独写入MLflow一条独立run")
 
     return best_model, X_test, feature_cols, feat_img_path, shap_img_path, csv_result_path, version_dir, eval_result_json
 
@@ -268,11 +340,6 @@ if __name__ == "__main__":
     # 直接调用，不再外层包裹mlflow start_run
     model, X_test, feat_list, feat_img_save, shap_img_save, csv_path, archive_folder, eval_dict = hyperparameter_tuning()
 
-    if DRAW_SHAP:
-        plot_shap_bar(model, X_test, feat_list, shap_img_save)
-        plot_xgb_feature_importance(model, feat_list, feat_img_save)
-    else:
-        logger.info("未启用SHAP绘图，跳过可视化生成")
 
     logger.info("\n" + "=" * 70)
     logger.info("✅ 模型训练+调参+版本归档全流程执行完毕！")
